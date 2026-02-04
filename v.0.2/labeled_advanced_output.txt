@@ -1,0 +1,58 @@
+Labeled Objects
+======================================================================
+
+#1: tghgrfvgefndvogernfd
+  Mode: highlight
+  Position: (151, 393)
+  Radius: 60px
+
+#2: car
+  Mode: highlight
+  Position: (210, 165)
+  Radius: 55px
+
+#3: man
+  Mode: highlight
+  Position: (444, 193)
+  Radius: 66px
+
+#4: bike
+  Mode: highlight
+  Position: (585, 351)
+  Radius: 50px
+
+#5: fchf
+  Mode: highlight
+  Position: (492, 561)
+  Radius: 32px
+
+#6: dsg
+  Mode: pixelate
+  Position: (295, 316)
+  Radius: 69px
+
+#7: dfhd
+  Mode: pixelate
+  Position: (197, 579)
+  Radius: 27px
+
+#8: dsgfdsc
+  Mode: darken
+  Position: (335, 440)
+  Radius: 24px
+
+#9: jfhbh
+  Mode: darken
+  Position: (320, 534)
+  Radius: 36px
+
+#10: fdcxh
+  Mode: outline
+  Position: (656, 227)
+  Radius: 27px
+
+#11: fgdfh
+  Mode: invert
+  Position: (769, 322)
+  Radius: 40px
+

@@ -1,0 +1,115 @@
+{
+  "image": "labeled_advanced_output.png",
+  "objects": [
+    {
+      "id": 1,
+      "label": "tghgrfvgefndvogernfd",
+      "mode": "highlight",
+      "center": [
+        151,
+        393
+      ],
+      "radius": 60
+    },
+    {
+      "id": 2,
+      "label": "car",
+      "mode": "highlight",
+      "center": [
+        210,
+        165
+      ],
+      "radius": 55
+    },
+    {
+      "id": 3,
+      "label": "man",
+      "mode": "highlight",
+      "center": [
+        444,
+        193
+      ],
+      "radius": 66
+    },
+    {
+      "id": 4,
+      "label": "bike",
+      "mode": "highlight",
+      "center": [
+        585,
+        351
+      ],
+      "radius": 50
+    },
+    {
+      "id": 5,
+      "label": "fchf",
+      "mode": "highlight",
+      "center": [
+        492,
+        561
+      ],
+      "radius": 32
+    },
+    {
+      "id": 6,
+      "label": "dsg",
+      "mode": "pixelate",
+      "center": [
+        295,
+        316
+      ],
+      "radius": 69
+    },
+    {
+      "id": 7,
+      "label": "dfhd",
+      "mode": "pixelate",
+      "center": [
+        197,
+        579
+      ],
+      "radius": 27
+    },
+    {
+      "id": 8,
+      "label": "dsgfdsc",
+      "mode": "darken",
+      "center": [
+        335,
+        440
+      ],
+      "radius": 24
+    },
+    {
+      "id": 9,
+      "label": "jfhbh",
+      "mode": "darken",
+      "center": [
+        320,
+        534
+      ],
+      "radius": 36
+    },
+    {
+      "id": 10,
+      "label": "fdcxh",
+      "mode": "outline",
+      "center": [
+        656,
+        227
+      ],
+      "radius": 27
+    },
+    {
+      "id": 11,
+      "label": "fgdfh",
+      "mode": "invert",
+      "center": [
+        769,
+        322
+      ],
+      "radius": 40
+    }
+  ]
+}

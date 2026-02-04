@@ -1,0 +1,35 @@
+{
+  "image": "labeled_advanced_output.png",
+  "objects": [
+    {
+      "id": 1,
+      "label": "dfgbdfh",
+      "mode": "highlight",
+      "center": [
+        162,
+        415
+      ],
+      "radius": 39
+    },
+    {
+      "id": 2,
+      "label": "dhdc2",
+      "mode": "highlight",
+      "center": [
+        313,
+        332
+      ],
+      "radius": 38
+    },
+    {
+      "id": 3,
+      "label": "bfdb",
+      "mode": "pixelate",
+      "center": [
+        600,
+        364
+      ],
+      "radius": 33
+    }
+  ]
+}

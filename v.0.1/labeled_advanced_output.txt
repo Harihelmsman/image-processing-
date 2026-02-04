@@ -1,0 +1,18 @@
+Labeled Objects
+======================================================================
+
+#1: dfgbdfh
+  Mode: highlight
+  Position: (162, 415)
+  Radius: 39px
+
+#2: dhdc2
+  Mode: highlight
+  Position: (313, 332)
+  Radius: 38px
+
+#3: bfdb
+  Mode: pixelate
+  Position: (600, 364)
+  Radius: 33px
+
