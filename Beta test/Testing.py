@@ -1067,119 +1067,197 @@ if __name__ == "__main__":
 # print(f"\nTotal spills found: {spill_count}")
 # print(f"Saved → {OUTPUT_PATH}")
 
-"""
-Segmentation Spill Detector — FAST VERSION
-────────────────────────────────────────────
-Fully vectorised. No Python pixel loops.
-Typical 1MP image: < 1 second.
-"""
-
 import cv2
 import numpy as np
 import time
+import os
 
-# ══════════════════════════════════════════════════════
-#  SETTINGS
-# ══════════════════════════════════════════════════════
-IMAGE_PATH      = r"C:\Users\mshar\OneDrive\Desktop\Data Ai\output\spill_detected.png"
-OUTPUT_PATH     = r"C:\Users\mshar\OneDrive\Desktop\Data Ai\output\spill_detected.png"
+INPUT_FOLDER  = r"C:\Users\mshar\OneDrive\Desktop\Data Ai\dead_pixel\input"
+OUTPUT_FOLDER = r"C:\Users\mshar\OneDrive\Desktop\Data Ai\dead_pixel\output"
 
-MAX_SPILL_AREA   = 15      # max pixels in a spill cluster
-MIN_SPILL_AREA   = 1       # min pixels (1 = single pixel)
-COLOR_TOLERANCE  = 20      # merge colours within this BGR distance
-CIRCLE_COLOR     = (0, 0, 255)
-CIRCLE_THICKNESS = 2
-MIN_CIRCLE_R     = 10
-# ══════════════════════════════════════════════════════
+# ── Detection parameters ──────────────────────────────────────────────────────
+MAX_SPILL_AREA    = 15          # slightly wider to catch missed spots
+MIN_SPILL_AREA    = 1
+COLOR_TOLERANCE   = 20
+NEIGHBOR_RING_PX  = 4           # how far outside a component to look for its host colour
 
+# ── Circle drawing parameters ─────────────────────────────────────────────────
+CIRCLE_COLOR      = (0, 0, 255)
+CIRCLE_THICKNESS  = 2
+MIN_CIRCLE_R      = 10
+
+# ── Clustering parameters ─────────────────────────────────────────────────────
+CLUSTER_DIST      = 60          # px – detections closer than this are merged
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 def fast_quantize(img, tolerance):
+    """Bucket-quantise every pixel and return a label image + palette."""
+    h, w    = img.shape[:2]
+    pixels  = img.reshape(-1, 3).astype(np.int32)
+    bucket  = max(1, tolerance)
+    quant   = (pixels // bucket) * bucket
+    encoded = (quant[:, 0].astype(np.int64) * 1_000_000
+             + quant[:, 1].astype(np.int64) * 1_000
+             + quant[:, 2].astype(np.int64))
+    unique_codes, flat_labels = np.unique(encoded, return_inverse=True)
+    n = len(unique_codes)
+    palette = [pixels[flat_labels == i].mean(axis=0).astype(np.uint8)
+               for i in range(n)]
+    return flat_labels.reshape(h, w).astype(np.int32), palette
+
+
+def surrounding_label_fast(label_img, x1, y1, x2, y2, ring_px=4):
     """
-    Vectorised colour quantisation.
-    Groups similar colours into labels using numpy — NO Python pixel loops.
+    Fast version: sample label values in a rectangular ring around the
+    component's bounding box instead of running a full dilation.
+    Returns the most-common label in that ring.
     """
-    h, w = img.shape[:2]
-    pixels = img.reshape(-1, 3).astype(np.int32)   # (N, 3)
+    h, w   = label_img.shape
+    ox1    = max(0, x1 - ring_px)
+    oy1    = max(0, y1 - ring_px)
+    ox2    = min(w - 1, x2 + ring_px)
+    oy2    = min(h - 1, y2 + ring_px)
 
-    # Round each channel to nearest multiple of tolerance → fast bucketing
-    bucket_size = max(1, tolerance)
-    quantised   = (pixels // bucket_size) * bucket_size  # (N, 3)
+    # Collect pixels in the outer rect but NOT the inner bounding box
+    outer  = label_img[oy1:oy2+1, ox1:ox2+1].ravel()
+    # Mask inner area
+    iy1b   = y1 - oy1
+    iy2b   = y2 - oy1
+    ix1b   = x1 - ox1
+    ix2b   = x2 - ox1
+    inner_h = iy2b - iy1b + 1
+    inner_w = ix2b - ix1b + 1
+    inner_size = inner_h * inner_w
 
-    # Encode each colour as a single int64 for fast unique lookup
-    encoded = (quantised[:, 0].astype(np.int64) * 1_000_000
-             + quantised[:, 1].astype(np.int64) * 1_000
-             + quantised[:, 2].astype(np.int64))
+    # Build inner mask: create boolean array of same shape and flatten
+    mask   = np.ones((oy2 - oy1 + 1, ox2 - ox1 + 1), dtype=bool)
+    mask[iy1b:iy2b+1, ix1b:ix2b+1] = False
+    ring_vals = label_img[oy1:oy2+1, ox1:ox2+1][mask]
 
-    unique_codes, label_img_flat = np.unique(encoded, return_inverse=True)
-
-    # Palette: mean colour per label
-    n_labels = len(unique_codes)
-    palette  = []
-    for lbl in range(n_labels):
-        mask = label_img_flat == lbl
-        palette.append(pixels[mask].mean(axis=0).astype(np.uint8))
-
-    return label_img_flat.reshape(h, w).astype(np.int32), palette
-
-
-def surrounding_label(label_img, comp_mask, dilation_px=5):
-    """Vectorised: dominant label in the ring just outside a component."""
-    kernel  = np.ones((dilation_px * 2 + 1,) * 2, np.uint8)
-    dilated = cv2.dilate(comp_mask, kernel)
-    ring    = (dilated > 0) & (comp_mask == 0)
-    ring_labels = label_img[ring]
-    if ring_labels.size == 0:
+    if ring_vals.size == 0:
         return -1
-    return int(np.bincount(ring_labels).argmax())
+    return int(np.bincount(ring_vals).argmax())
 
 
-# ── Load ──────────────────────────────────────────────
-img = cv2.imread(IMAGE_PATH)
-if img is None:
-    raise FileNotFoundError(f"Cannot open '{IMAGE_PATH}'")
+def cluster_detections(detections, merge_dist):
+    """
+    Greedy clustering: merge detections whose centres are within merge_dist px.
+    Returns list of (cx, cy, r) for each cluster, where r encloses all members.
+    """
+    if not detections:
+        return []
 
-h, w = img.shape[:2]
-print(f"Image: {w}x{h}  ({w*h:,} pixels)")
+    pts  = np.array([[d[0], d[1]] for d in detections], dtype=np.float32)
+    radii = np.array([d[2] for d in detections], dtype=np.float32)
+    used  = np.zeros(len(pts), dtype=bool)
+    clusters = []
 
-t0 = time.time()
+    for i in range(len(pts)):
+        if used[i]:
+            continue
+        # Find all points within merge_dist of point i
+        dists   = np.linalg.norm(pts - pts[i], axis=1)
+        members = np.where(dists <= merge_dist)[0]
+        used[members] = True
 
-print("Quantising colours (vectorised) ...")
-label_img, palette = fast_quantize(img, COLOR_TOLERANCE)
-n_labels = len(palette)
-print(f"  -> {n_labels} colour regions  [{time.time()-t0:.2f}s]")
+        # Enclosing circle: centre = mean of member centres,
+        # radius = max(dist_from_new_centre + member_radius)
+        cx = float(pts[members, 0].mean())
+        cy = float(pts[members, 1].mean())
+        r  = int(max(
+            np.linalg.norm(pts[members] - [cx, cy], axis=1) + radii[members]
+        ))
+        clusters.append((int(cx), int(cy), max(MIN_CIRCLE_R, r)))
 
-# ── Scan connected components of each label ───────────
-output      = img.copy()
-spill_count = 0
+    return clusters
 
-t1 = time.time()
-for lbl in range(n_labels):
-    single_mask = (label_img == lbl).astype(np.uint8) * 255
 
-    num_cc, cc_labels, stats, centroids = cv2.connectedComponentsWithStats(
-        single_mask, connectivity=8
+# ─────────────────────────────────────────────────────────────────────────────
+# Main processing loop
+# ─────────────────────────────────────────────────────────────────────────────
+
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+counter = 1
+
+for file in sorted(os.listdir(INPUT_FOLDER)):
+
+    if not file.lower().endswith((".png", ".jpg", ".jpeg")):
+        continue
+
+    filepath = os.path.join(INPUT_FOLDER, file)
+    print(f"\nProcessing: {filepath}")
+
+    img = cv2.imread(filepath)
+    if img is None:
+        print("  Failed to load – skipping.")
+        continue
+
+    h, w = img.shape[:2]
+    print(f"  Size: {w}×{h}  ({w*h:,} px)")
+
+    t0 = time.time()
+
+    label_img, palette = fast_quantize(img, COLOR_TOLERANCE)
+    n_labels = len(palette)
+
+    raw_detections = []   # (cx, cy, r, label_colour_hex)
+
+    for lbl in range(n_labels):
+        single_mask = (label_img == lbl).astype(np.uint8) * 255
+
+        num_cc, cc_labels, stats, centroids = cv2.connectedComponentsWithStats(
+            single_mask, connectivity=8
+        )
+
+        for cc_id in range(1, num_cc):
+            area = int(stats[cc_id, cv2.CC_STAT_AREA])
+            if not (MIN_SPILL_AREA <= area <= MAX_SPILL_AREA):
+                continue
+
+            x1 = int(stats[cc_id, cv2.CC_STAT_LEFT])
+            y1 = int(stats[cc_id, cv2.CC_STAT_TOP])
+            x2 = x1 + int(stats[cc_id, cv2.CC_STAT_WIDTH])  - 1
+            y2 = y1 + int(stats[cc_id, cv2.CC_STAT_HEIGHT]) - 1
+
+            # ── Fast surrounding-label check ──────────────────────────────
+            surr = surrounding_label_fast(label_img, x1, y1, x2, y2,
+                                          ring_px=NEIGHBOR_RING_PX)
+
+            if surr == lbl or surr == -1:
+                continue        # same colour or edge – not a spill
+
+            cx = int(centroids[cc_id][0])
+            cy = int(centroids[cc_id][1])
+            r  = max(MIN_CIRCLE_R, int(np.sqrt(area) * 4)) * 2
+
+            c = palette[lbl]
+            raw_detections.append((cx, cy, r, f"#{c[2]:02X}{c[1]:02X}{c[0]:02X}"))
+
+    # ── Cluster nearby detections → single enclosing circles ─────────────────
+    clusters = cluster_detections(
+        [(cx, cy, r) for cx, cy, r, _ in raw_detections],
+        merge_dist=CLUSTER_DIST
     )
 
-    for cc_id in range(1, num_cc):
-        area = int(stats[cc_id, cv2.CC_STAT_AREA])
-        if not (MIN_SPILL_AREA <= area <= MAX_SPILL_AREA):
-            continue
+    print(f"  Raw detections : {len(raw_detections)}")
+    print(f"  After clustering: {len(clusters)} circle(s)")
 
-        comp_mask = (cc_labels == cc_id).astype(np.uint8) * 255
-        surr = surrounding_label(label_img, comp_mask, dilation_px=4)
+    output = img.copy()
+    for cx, cy, r in clusters:
+        cv2.circle(output, (cx, cy), r, CIRCLE_COLOR, CIRCLE_THICKNESS)
 
-        if surr != lbl and surr != -1:
-            cx, cy = int(centroids[cc_id][0]), int(centroids[cc_id][1])
-            r = max(MIN_CIRCLE_R, int(np.sqrt(area) * 4))
-            cv2.circle(output, (cx, cy), r, CIRCLE_COLOR, CIRCLE_THICKNESS)
-            cv2.circle(output, (cx, cy), 3, (0, 255, 255), -1)
+    elapsed = time.time() - t0
+    print(f"  Time: {elapsed:.2f}s")
 
-            spill_count += 1
-            c = palette[lbl]
-            print(f"  Spill #{spill_count}: #{c[2]:02X}{c[1]:02X}{c[0]:02X}  "
-                  f"area={area}px  centre=({cx},{cy})")
+    out_name = f"output_{counter:03d}.png"
+    out_path = os.path.join(OUTPUT_FOLDER, out_name)
+    cv2.imwrite(out_path, output)
+    print(f"  Saved → {out_path}")
 
-print(f"\nComponent scan done  [{time.time()-t1:.2f}s]")
-print(f"Total spills found  : {spill_count}")
-cv2.imwrite(OUTPUT_PATH, output)
-print(f"Saved -> {OUTPUT_PATH}   [total {time.time()-t0:.2f}s]")
+    counter += 1
+
+print("\nDone.")
