@@ -61,7 +61,7 @@ FONT        = cv2.FONT_HERSHEY_DUPLEX
 AA          = cv2.LINE_AA
 CANVAS_W    = 1440
 CANVAS_H    = 900
-CANVAS_BG   = (18, 18, 18)
+CANVAS_BG   = np.array([18, 18, 18], dtype=np.uint8)
 CANVAS_PAD  = 40
 OVERVIEW_PX = 2400   # longest edge of always-resident working image
 
@@ -145,7 +145,7 @@ class Viewport:
         """Crop-then-scale into pre-allocated buffer.  Returns a VIEW (not a copy)."""
         ih, iw = image.shape[:2]
         s = self._s;  tx = self._tx;  ty = self._ty
-        np.copyto(self._buf, CANVAS_BG)
+        self._buf[:] = CANVAS_BG
         x0f = max(0.0, (-tx)/s);         y0f = max(0.0, (-ty)/s)
         x1f = min(float(iw),(self.cw-tx)/s); y1f = min(float(ih),(self.ch-ty)/s)
         if x1f<=x0f or y1f<=y0f: return self._buf
@@ -225,12 +225,12 @@ def apply_effect_roi(image: np.ndarray, cx: int, cy: int, r: int, mode: EditMode
         small = cv2.resize(roi, (max(1,rw//step), max(1,rh//step)), interpolation=cv2.INTER_NEAREST)
         roi[mb] = cv2.resize(small, (rw,rh), interpolation=cv2.INTER_NEAREST)[mb]
     elif mode == EditMode.DARKEN:
-        roi[mb] = (roi[mb].astype(np.uint16)*45//100).astype(np.uint8)
+        roi[mb] = (roi[mb].astype(np.float32) * 0.45).clip(0, 255).astype(np.uint8)
     elif mode == EditMode.GRAYSCALE:
         gray3 = cv2.cvtColor(cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
         roi[mb] = gray3[mb]
     elif mode == EditMode.INVERT:
-        roi[mb] = 255 - roi[mb]
+        roi[mb] = np.uint8(255) - roi[mb]
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -811,13 +811,14 @@ class BatchLabeledEditor:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 def main():
+    global OVERVIEW_PX
     ap=argparse.ArgumentParser(description="Batch Labeled Editor")
     ap.add_argument("input_folder")
     ap.add_argument("--output","-o",default=None)
     ap.add_argument("--overview-px",type=int,default=OVERVIEW_PX,
                     help=f"Overview longest edge px (default {OVERVIEW_PX})")
     args=ap.parse_args()
-    global OVERVIEW_PX; OVERVIEW_PX=args.overview_px
+    OVERVIEW_PX=args.overview_px
     try:
         BatchLabeledEditor(args.input_folder,args.output).run()
     except KeyboardInterrupt: print("\n  Interrupted"); return 130
