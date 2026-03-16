@@ -83,6 +83,62 @@ with open('2016_mask.json ') as f:
 for  d in data["shapes"]:
     print(d["label"],d["group_id"],d["shape_color"])
 
+#___________________________________________________
+
+import json
+import os
+
+CLASS_COLORS = {
+    "human": [255, 0, 0],
+    "animal": [0, 255, 0],
+    "vehicle": [0, 0, 255]
+}
+
+# priority order
+ORDER = ["human", "animal", "vehicle"]
+
+def process_json(json_path):
+
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    shapes = data.get("shapes", [])
+
+    id_map = {}
+    counter = 1
+
+    # process labels in defined order
+    for class_name in ORDER:
+
+        for shape in shapes:
+
+            label = shape.get("label", "").lower()
+
+            if label != class_name:
+                continue
+
+            old_id = shape.get("group_id")
+
+            key = f"{label}_{old_id}"
+
+            if key not in id_map:
+                id_map[key] = counter
+                counter += 1
+
+            new_id = id_map[key]
+
+            shape["group_id"] = new_id
+            shape["color"] = CLASS_COLORS[label]
+
+    with open(json_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print("Processed:", json_path)
 
 
+folder = "annotations"
 
+for file in os.listdir(folder):
+    if file.endswith(".json"):
+        process_json(os.path.join(folder, file))
+        
